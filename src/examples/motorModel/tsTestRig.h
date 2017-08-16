@@ -30,6 +30,9 @@
 // This library
 #include "core/tgModel.h"
 #include "core/tgSubject.h"
+// ROS
+#include <std_msgs/Float64MultiArray.h>
+#include <ros/ros.h>
 // The C++ Standard Library
 #include <vector>
 
@@ -105,6 +108,8 @@ public:
 	}
     
       
+    void motorsCallback(const std_msgs::Float64MultiArray::ConstPtr& motormsg);
+  
 private:
     
     /**
@@ -139,6 +144,13 @@ private:
     double totalTime;
     bool reached;
     bool useKinematic;
+    // ROS
+    int number_sensors;
+    int number_motors;
+    bool gotmotor;
+    float* motorValues;
+    ros::Publisher sensor_pub;
+    ros::Subscriber motor_sub;
 };
 
 #endif  // Prism_MODEL_H

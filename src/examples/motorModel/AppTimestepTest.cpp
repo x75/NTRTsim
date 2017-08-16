@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     // simulation
     
     // Toggle whether the linear or kinematic motor model is used
-    bool useKinematic = true;
+    bool useKinematic = false; // true;
     tsTestRig* const myModel = new tsTestRig(useKinematic);
     
     // Add the model to the world

@@ -22,6 +22,12 @@
  * $Id$
  */
 
+// ROS
+#include <ros/ros.h>
+#include "std_msgs/MultiArrayLayout.h"
+#include "std_msgs/MultiArrayDimension.h"
+#include <std_msgs/Float64MultiArray.h>
+
 // This module
 #include "tsTestRig.h"
 // This library
@@ -126,7 +132,8 @@ void tsTestRig::setup(tgWorld& world)
     addMuscles(s);
     
     // Move the structure so it doesn't start in the ground
-    s.move(btVector3(0, 5, 0));
+    // s.move(btVector3(0, 1.0, -1.0));
+    s.move(btVector3(0, 3.0, 0.0));
     
     // Create the build spec that uses tags to turn the structure into a real model
     // The top rod will be massless - fixed in space
@@ -154,6 +161,26 @@ void tsTestRig::setup(tgWorld& world)
     // We could now use tgCast::filter or similar to pull out the
     // models (e.g. muscles) that we want to control. 
     allMuscles = tgCast::filter<tgModel, tgSpringCableActuator> (getDescendants());
+
+    // ROS
+    char* p = 0;
+    int argc = 0;
+    ros::init(argc, &p, "tsTestRig");
+
+    ros::NodeHandle n;
+
+    std::string sensor_msg_name = "tsTestRig";
+    sensor_msg_name += "/sensors";
+
+    std::string motor_msg_name = "tsTestRig";
+    motor_msg_name += "/motors";
+    
+    sensor_pub = n.advertise<std_msgs::Float64MultiArray>(sensor_msg_name, 1);
+    motor_sub  = n.subscribe(motor_msg_name, 1, &tsTestRig::motorsCallback, this);
+    number_motors = 1;
+    motorValues = (float*)malloc(sizeof(float)*number_motors);
+    // memset(motorValues,0,sizeof(double)*motornumber);
+
     
     // Notify controllers that setup has finished.
     notifySetup();
@@ -165,8 +192,23 @@ void tsTestRig::setup(tgWorld& world)
     reached = false;
 }
 
+void tsTestRig::motorsCallback(const std_msgs::Float64MultiArray::ConstPtr& motormsg) {
+  // std::cerr << "got something: [" << motormsg->data[0] << ", " << motormsg->data[1] << "]" << std::endl;
+  // std::cerr << "data size: " << motormsg->data.size() << ", " << number_motors << std::endl;
+  int len=std::min((int)motormsg->data.size(), number_motors);
+  for(int k=0;k<len;k++){
+    motorValues[k] = motormsg->data[k];
+    std::cout << "tsTestRig.cpp::motorsCallback: motorValues[" << k << "] = " << motorValues[k] << std::endl;
+  }
+  gotmotor = true;
+}
+
 void tsTestRig::step(double dt)
 {
+  if(!ros::ok()) {
+    return;
+    std::cerr << "Ros connection error" << std::endl;
+  }
     // Precondition
     if (dt <= 0.0)
     {
@@ -184,8 +226,10 @@ void tsTestRig::step(double dt)
         }
         else
         {
-            allMuscles[0]->setControlInput(5.0, dt);
+	  // allMuscles[0]->setControlInput(5.0, dt);
+	  allMuscles[0]->setControlInput(motorValues[0], dt);
         }
+	
         if (allMuscles[0]->getRestLength() <= 5.0 && !reached)
         {
 			std::cout << "Rest length below 5.0 at: " << totalTime << std::endl;
@@ -194,6 +238,36 @@ void tsTestRig::step(double dt)
         
         tgModel::step(dt);  // Step any children
 		//std::cout << allMuscles[0]->getRestLength() << std::endl;
+
+	// std::cout << allMuscles << std::endl;
+	// std::cout << "0:" << allMuscles[0]->getRestLength() << std::endl;
+	// std::cout << "0:" << allMuscles[0]->getCurrentLength() << std::endl;
+	// std::cout << "0:" << allMuscles[0]->getTension() << std::endl;
+	// std::cout << "1:" << allMuscles[1]->getRestLength() << std::endl;
+	
+	// ROS
+	std_msgs::Float64MultiArray msg;
+	//   msg.layout.dim_length = 1;
+	msg.data.clear();
+	// for(int k=0;k<sensornumber;k++){
+	//   msg.data.push_back(sensors[k]);
+	// }
+	msg.data.push_back(allMuscles[0]->getRestLength());
+	msg.data.push_back(allMuscles[0]->getCurrentLength());
+	msg.data.push_back(allMuscles[0]->getTension());
+	// msg.data = std::vector<double>(sensors[0], sensors[sensornumber-1]);
+	// memcpy(msg.data,sensors, msg.data);
+
+	sensor_pub.publish(msg);
+	// spin once so to harvest incoming data
+	ros::spinOnce();
+	// here we need to wait
+	// while(!gotmotor) {}
+	// (FIXME) give the external controller 10ms to compute motor response
+	// to the stimulus
+	// usleep(10000);
+
+	// memcpy(motors,motorValues,sizeof(double)*motornumber);
     }
     
 }
